@@ -1,0 +1,48 @@
+خطوات تفعيل الأمان (مرة واحدة):
+1) console.firebase.google.com > Add project > سمّيه masar.
+2) Build > Authentication > Get started > Email/Password > Enable.
+3) Authentication > Users > Add user: البريد zeus@masar.app  والباسورد (غيّره عن 123456789).
+4) Authentication > Settings > Authorized domains: ضيف modyhelal7-boop.github.io
+5) Build > Firestore Database > Create (production mode).
+6) Firestore > Rules، الصق ده واضغط Publish:
+rules_version = '2';
+service cloud.firestore { match /databases/{d}/documents {
+  match /site/data { allow read: if true;
+    allow write: if request.auth != null && request.auth.token.email == 'zeus@masar.app'; } } }
+7) Project settings > Your apps > Web (</>) > انسخ firebaseConfig وحطه في firebase-config.js:
+   window.FB={apiKey:"..",authDomain:"..",projectId:"..",appId:".."};
+8) ارفع الملفات على GitHub، وادخل على:  .../masar.com/index.html#admin
+بعدها أي تعديل من الداشبورد يظهر لكل الزوار فورًا.
+
+--- تحديث القواعد (لرفع صور الأعمال من الداشبورد): بدّل قواعد Firestore كلها بالآتي ---
+rules_version = '2';
+service cloud.firestore { match /databases/{d}/documents {
+  match /site/data { allow read: if true; allow write: if request.auth != null && request.auth.token.email == 'zeus@masar.app'; }
+  match /media/{id} { allow read: if true; allow write: if request.auth != null && request.auth.token.email == 'zeus@masar.app'; } } }
+
+--- القواعد النهائية (إدارة المستخدمين والأدوار): بدّل قواعد Firestore كلها بالآتي ---
+rules_version = '2';
+service cloud.firestore { match /databases/{d}/documents {
+  function ok(){ return request.auth != null && (request.auth.token.email == 'zeus@masar.app' || exists(/databases/$(database)/documents/users/$(request.auth.uid))); }
+  function adm(){ return request.auth != null && (request.auth.token.email == 'zeus@masar.app' || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'); }
+  match /site/data { allow read: if true; allow write: if ok(); }
+  match /media/{id} { allow read: if true; allow write: if ok(); }
+  match /users/{u} { allow read: if request.auth != null && (request.auth.uid == u || adm()); allow write: if adm(); }
+} }
+
+=== الدخول بحساب Google (الإصدار الأخير - استخدم القواعد دي بدل أي قواعد قبلها) ===
+1) Authentication > Sign-in method > Google > Enable > Save.
+2) من داشبورد الموقع > المستخدمون > أضف جيميل المستخدم واختر دوره. هو بس اللي هيقدر يدخل بزر "الدخول بحساب Google".
+3) قواعد Firestore:
+rules_version = '2';
+service cloud.firestore { match /databases/{d}/documents {
+  function owner(){ return request.auth != null && request.auth.token.email == 'zeus@masar.app'; }
+  function me(){ return get(/databases/$(database)/documents/users/$(request.auth.token.email.lower())).data; }
+  function ok(){ return owner() || (request.auth != null && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'password') && exists(/databases/$(database)/documents/users/$(request.auth.token.email.lower())) && me().active != false); }
+  function adm(){ return owner() || (ok() && me().role == 'admin'); }
+  match /site/data { allow read: if true; allow write: if ok(); }
+  match /media/{id} { allow read: if true; allow write: if ok(); }
+  match /users/{u} { allow read: if request.auth != null && (request.auth.token.email.lower() == u || adm()); allow write: if adm(); }
+} }
+
+(ملحوظة: القاعدة دي بتسمح لحسابات الإيميل+الباسورد وحسابات Google، بشرط إن الجيميل مضاف في تبويب المستخدمين وحالته نشط.)
